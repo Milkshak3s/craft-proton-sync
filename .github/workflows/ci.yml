@@ -43,7 +43,10 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
+      # Saved even when a later step fails, so a red run still warms the next one.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
 
       - name: Format
         if: runner.os == 'Linux'

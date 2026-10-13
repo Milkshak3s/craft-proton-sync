@@ -88,7 +88,7 @@ Windows Credential Manager, macOS Keychain, or libsecret (GNOME Keyring, KWallet
 
 ## Downloads
 
-Releases have a portable `.zip` for Windows (x64, arm64), a universal `.dmg` for macOS and a
+[**Download the latest release**](https://github.com/Milkshak3s/craft-proton-sync/releases/latest). Releases have a portable `.zip` for Windows (x64, arm64), a universal `.dmg` for macOS and a
 `.tar.gz` for Linux (x86_64, aarch64), with `SHA256SUMS.txt`. The builds are not code-signed:
 Windows SmartScreen and macOS Gatekeeper will warn on first launch (on macOS, right-click the
 app and choose Open).

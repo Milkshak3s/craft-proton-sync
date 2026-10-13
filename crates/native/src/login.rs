@@ -23,38 +23,44 @@ fn program() -> Result<PathBuf, String> {
     std::env::current_exe().map_err(|e| format!("couldn't find this program ({e})"))
 }
 
-#[cfg(not(windows))]
+/// The LaunchAgent that starts the app at login.
+#[cfg(target_os = "macos")]
 fn entry() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    return Ok(dirs::home_dir()
+    Ok(dirs::home_dir()
         .ok_or("no home folder")?
         .join("Library/LaunchAgents")
-        .join(format!("{ID}.plist")));
-    #[cfg(not(target_os = "macos"))]
-    return Ok(dirs::config_dir()
-        .ok_or("no config folder")?
-        .join("autostart")
-        .join(format!("{ID}.desktop")));
+        .join(format!("{ID}.plist")))
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn contents(exe: &std::path::Path) -> String {
-    let exe = exe.display().to_string();
-    #[cfg(target_os = "macos")]
-    {
-        let escaped = exe.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-        return format!(
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
-             <plist version=\"1.0\">\n<dict>\n  <key>Label</key>\n  <string>{ID}</string>\n  <key>ProgramArguments</key>\n  <array>\n    <string>{escaped}</string>\n    <string>{HIDDEN_FLAG}</string>\n  </array>\n  <key>RunAtLoad</key>\n  <true/>\n</dict>\n</plist>\n"
-        );
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let quoted = exe.replace('\\', "\\\\").replace('"', "\\\"");
-        format!(
-            "[Desktop Entry]\nType=Application\nName=Craft Proton Sync\nExec=\"{quoted}\" {HIDDEN_FLAG}\nIcon={ID}\nX-GNOME-Autostart-enabled=true\n"
-        )
-    }
+    let exe = exe
+        .display()
+        .to_string()
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+         <plist version=\"1.0\">\n<dict>\n  <key>Label</key>\n  <string>{ID}</string>\n  <key>ProgramArguments</key>\n  <array>\n    <string>{exe}</string>\n    <string>{HIDDEN_FLAG}</string>\n  </array>\n  <key>RunAtLoad</key>\n  <true/>\n</dict>\n</plist>\n"
+    )
+}
+
+/// The XDG autostart entry that starts the app at login.
+#[cfg(not(any(windows, target_os = "macos")))]
+fn entry() -> Result<PathBuf, String> {
+    Ok(dirs::config_dir()
+        .ok_or("no config folder")?
+        .join("autostart")
+        .join(format!("{ID}.desktop")))
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn contents(exe: &std::path::Path) -> String {
+    let exe = exe.display().to_string().replace('\\', "\\\\").replace('"', "\\\"");
+    format!(
+        "[Desktop Entry]\nType=Application\nName=Craft Proton Sync\nExec=\"{exe}\" {HIDDEN_FLAG}\nIcon={ID}\nX-GNOME-Autostart-enabled=true\n"
+    )
 }
 
 #[cfg(windows)]

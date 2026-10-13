@@ -64,6 +64,7 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          cache-on-failure: true
           key: release-${{ matrix.target }}
       - name: Build
         run: cargo build --release --locked -p craft-proton-sync --target ${{ matrix.target }}
@@ -105,6 +106,7 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          cache-on-failure: true
           key: release-${{ matrix.arch }}
       - name: Build
         run: cargo build --release --locked -p craft-proton-sync
@@ -133,6 +135,7 @@ jobs:
           targets: aarch64-apple-darwin, x86_64-apple-darwin
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          cache-on-failure: true
           key: release-macos
       - name: Build (Apple silicon and Intel)
         run: |
