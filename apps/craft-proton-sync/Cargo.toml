@@ -1,0 +1,28 @@
+[package]
+name = "craft-proton-sync"
+description = "Craft Proton Sync: keeps what you save from the Craft apps in step with Proton Drive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+craft-proton-sync-core = { workspace = true }
+craft-proton-sync-ui-egui = { workspace = true }
+craft-proton-sync-native = { workspace = true }
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
+egui = { workspace = true }
+log = { workspace = true }
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+
+# The tray (menu bar) icon. On Linux the StatusNotifierItem backend talks D-Bus directly, so no
+# GTK or libappindicator is needed.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tray-icon = "0.25"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }

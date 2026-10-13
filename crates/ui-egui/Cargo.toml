@@ -1,0 +1,18 @@
+[package]
+name = "craft-proton-sync-ui-egui"
+description = "Craft Proton Sync's egui interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+craft-proton-sync-core = { workspace = true }
+egui = { workspace = true }
+
+[dev-dependencies]
+egui_kittest = { workspace = true }

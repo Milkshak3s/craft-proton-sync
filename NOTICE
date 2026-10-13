@@ -1,0 +1,20 @@
+Craft Proton Sync
+Copyright (c) 2026 the Craft Proton Sync contributors.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+Craft Proton Sync is an independent, unofficial project. It is not affiliated with, endorsed by
+or supported by Proton AG or the ArtCraft Team. "Proton" and "Proton Drive"
+are trademarks of Proton AG; "ArtCraft" and the Craft app names are trademarks of the ArtCraft
+Team. They are used here only to say what this software works with.
+
+Third-party material
+
+The Proton Drive CLI (https://github.com/ProtonDriveApps/sdk, Copyright (c) Proton AG) is not
+bundled. The app downloads the pinned, unmodified release from https://proton.me/download/drive/cli
+on first run and runs it as a separate program.
+
+The workspace layout, the colour tokens in crates/ui-egui/src/theme.rs and parts of the tray and
+login-item code follow ArtCraft Launcher (https://github.com/storytold/craft-launcher), which is
+Copyright (c) 2026 ArtCraft Team and the ArtCraft Launcher contributors and licensed under the
+MIT License or the Apache License, Version 2.0. None of ArtCraft's logos, marks or fonts are used.

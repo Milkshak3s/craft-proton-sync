@@ -1,0 +1,175 @@
+name: Release
+
+# Pushing to the `release` branch builds every platform and creates the draft GitHub Release
+# "Craft Proton Sync v<version>", with the version from [workspace.package] in Cargo.toml.
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override for a test run, e.g. 0.2.0-rc.1 (empty: Cargo.toml)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  APP: craft-proton-sync
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: version
+        env:
+          OVERRIDE: ${{ inputs.version }}
+        run: |
+          version="$OVERRIDE"
+          if [ -z "$version" ]; then
+            version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "craft-proton-sync") | .version')"
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "not a version: '$version'" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    name: windows-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, target: x86_64-pc-windows-msvc }
+          - { arch: arm64, runner: windows-11-arm, target: aarch64-pc-windows-msvc }
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked -p craft-proton-sync --target ${{ matrix.target }}
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "$env:APP-$env:VERSION-windows-${{ matrix.arch }}-portable"
+          New-Item -ItemType Directory -Force "dist/$name" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/$env:APP.exe", README.md, LICENSE-MIT, LICENSE-APACHE, NOTICE "dist/$name/"
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    needs: version
+    name: linux-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest supported runners, so the binaries run against an older glibc.
+          - { arch: x86_64, runner: ubuntu-22.04 }
+          - { arch: aarch64, runner: ubuntu-22.04-arm }
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Linux system dependencies (egui/winit)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: release-${{ matrix.arch }}
+      - name: Build
+        run: cargo build --release --locked -p craft-proton-sync
+      - name: Package
+        run: |
+          name="$APP-$VERSION-linux-${{ matrix.arch }}"
+          mkdir -p "dist/$name"
+          cp "target/release/$APP" packaging/linux/craft-proton-sync.desktop README.md LICENSE-MIT LICENSE-APACHE NOTICE "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  macos:
+    needs: version
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: release-macos
+      - name: Build (Apple silicon and Intel)
+        run: |
+          cargo build --release --locked -p craft-proton-sync --target aarch64-apple-darwin
+          cargo build --release --locked -p craft-proton-sync --target x86_64-apple-darwin
+      - name: Package (universal .dmg, not notarized)
+        run: packaging/macos/package.sh "$VERSION"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-universal
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [version, windows, linux, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" dist/* \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "Craft Proton Sync v$VERSION" \
+            --generate-notes

@@ -1,0 +1,31 @@
+[package]
+name = "craft-proton-sync-native"
+description = "Craft Proton Sync desktop backend: downloads Proton's Drive CLI, signs in, watches the folder and runs the syncs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+craft-proton-sync-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+dirs = "6"
+sha2 = "0.10"
+# HTTPS over rustls, with the OS verifying certificates.
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+sha1 = "0.10"
+# Moves files to the Recycle Bin / Trash instead of deleting them.
+trash = "5"
+notify = "8"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.55"
+
+[dev-dependencies]
+tempfile = "3"

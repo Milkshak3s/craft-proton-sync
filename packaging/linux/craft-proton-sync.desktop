@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Craft Proton Sync
+Comment=Keeps what you save from the Craft apps in step with Proton Drive
+Exec=craft-proton-sync
+Icon=craft-proton-sync
+Terminal=false
+Categories=Utility;Network;FileTransfer;
+StartupWMClass=craft-proton-sync
