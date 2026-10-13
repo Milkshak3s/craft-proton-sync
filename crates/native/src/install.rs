@@ -6,7 +6,6 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::time::Duration;
 
 use craft_proton_sync_core::drive::{self, Asset};
 use sha2::{Digest, Sha512};
@@ -16,7 +15,6 @@ use crate::paths::Paths;
 
 /// The CLI is about 100 MB; anything far past that is not the CLI.
 const MAX_BYTES: u64 = 400 * 1024 * 1024;
-const USER_AGENT: &str = concat!("Craft-Proton-Sync/", env!("CARGO_PKG_VERSION"));
 
 fn io_err(what: &str, e: impl std::fmt::Display) -> String {
     format!("{what} ({e})")
@@ -51,13 +49,7 @@ pub fn ensure(paths: &Paths, progress: &mut dyn FnMut(u64, Option<u64>)) -> Resu
 
 fn download(asset: &Asset, to: &Path, progress: &mut dyn FnMut(u64, Option<u64>)) -> Result<(), String> {
     let too_big = || "the Proton Drive CLI download is far larger than it should be".to_string();
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_connect(Some(Duration::from_secs(30)))
-        .timeout_recv_body(Some(Duration::from_secs(1800)))
-        .user_agent(USER_AGENT)
-        .build()
-        .into();
-    let response = agent
+    let response = crate::http::agent()
         .get(asset.url())
         .call()
         .map_err(|e| io_err("couldn't download the Proton Drive CLI", e))?;

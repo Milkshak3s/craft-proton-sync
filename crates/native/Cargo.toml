@@ -23,6 +23,10 @@ sha1 = "0.10"
 # Moves files to the Recycle Bin / Trash instead of deleting them.
 trash = "5"
 notify = "8"
+# Unpacking the app's own updates: .zip on Windows, .tar.gz elsewhere.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.55"

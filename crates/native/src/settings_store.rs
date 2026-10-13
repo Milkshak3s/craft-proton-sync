@@ -41,6 +41,7 @@ mod tests {
             poll_minutes: 15,
             paused: true,
             close_to_tray: false,
+            auto_update: true,
             local_root: Some(dir.path().join("art")),
         };
         save(&path, &settings).unwrap();

@@ -71,6 +71,23 @@ to Proton. The session Proton gives back is kept by the CLI in your system's sec
 Windows Credential Manager, macOS Keychain, or libsecret (GNOME Keyring, KWallet) on Linux.
 **Sign out** deletes it. If you also use Proton's Drive CLI yourself, it shares that session.
 
+## Updates
+
+The app looks at this project's [releases](https://github.com/Milkshak3s/craft-proton-sync/releases)
+when it starts and once a day after that. That request goes to GitHub and carries nothing about
+you beyond what any download does.
+
+- **Update now.** When a newer version is out, the Updates section says so and **Update now**
+  installs it: the package for your computer is downloaded, checked against the release's
+  `SHA256SUMS.txt`, swapped in for the running program, and the app starts again as the new
+  version. It never interrupts a sync.
+- **Install new versions automatically** is off by default. Turned on, the same thing happens
+  without asking whenever a new release is published.
+- If the app is somewhere it can't write (a system folder, a read-only disk), it says so and you
+  download the new version from the releases page yourself.
+
+Version 0.1.0 has no updater: install 0.2.0 or later by hand once.
+
 ## Known limits
 
 - Changes from other devices arrive on the timer, not instantly.
@@ -89,7 +106,8 @@ Windows Credential Manager, macOS Keychain, or libsecret (GNOME Keyring, KWallet
 ## Downloads
 
 [**Download the latest release**](https://github.com/Milkshak3s/craft-proton-sync/releases/latest). Releases have a portable `.zip` for Windows (x64, arm64), a universal `.dmg` for macOS and a
-`.tar.gz` for Linux (x86_64, aarch64), with `SHA256SUMS.txt`. The builds are not code-signed:
+`.tar.gz` for Linux (x86_64, aarch64), with `SHA256SUMS.txt`. (The `.app.tar.gz` is the macOS
+bundle on its own, which the app updates itself from.) The builds are not code-signed:
 Windows SmartScreen and macOS Gatekeeper will warn on first launch (on macOS, right-click the
 app and choose Open).
 

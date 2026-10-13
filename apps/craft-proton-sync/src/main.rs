@@ -22,11 +22,11 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use craft_proton_sync_core::APP_NAME;
-use craft_proton_sync_core::protocol::{Backend, Command, Phase};
+use craft_proton_sync_core::protocol::{Backend, Command, Phase, Update};
 use craft_proton_sync_core::settings::Settings;
 use craft_proton_sync_native::paths::Paths;
 use craft_proton_sync_native::single_instance::{self, Claim};
-use craft_proton_sync_native::{Engine, login, open, settings_store};
+use craft_proton_sync_native::{Engine, login, open, settings_store, update};
 use craft_proton_sync_ui_egui::theme::{self, Tokens};
 use craft_proton_sync_ui_egui::{Host, SyncUi};
 
@@ -35,6 +35,8 @@ use tray::{Tray, TrayAction};
 const APP_ID: &str = "craft-proton-sync";
 /// How long a tray Quit may wait for the window to take it up before the app exits anyway.
 const QUIT_GRACE: Duration = Duration::from_secs(2);
+/// How long a copy started by an update waits for the old one to quit.
+const RESTART_WAIT: Duration = Duration::from_secs(30);
 
 /// Repaints the window, from any thread, once there is one.
 #[derive(Clone, Default)]
@@ -71,7 +73,17 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let _instance = match single_instance::claim(&paths.instance_lock()) {
+    // Started by an update: the copy that installed it is still quitting, so give it a moment
+    // to let go.
+    let restarted = args.iter().any(|a| a == update::RESTARTED_FLAG);
+    let claim = || single_instance::claim(&paths.instance_lock());
+    let mut claimed = claim();
+    let waiting_since = std::time::Instant::now();
+    while restarted && matches!(claimed, Ok(Claim::Secondary)) && waiting_since.elapsed() < RESTART_WAIT {
+        std::thread::sleep(Duration::from_millis(250));
+        claimed = claim();
+    }
+    let _instance = match claimed {
         Ok(Claim::Primary(lock)) => Some(lock),
         Ok(Claim::Secondary) => {
             log::info!("{APP_NAME} is already running");
@@ -83,6 +95,7 @@ fn main() -> ExitCode {
             None
         }
     };
+    update::clean_up(&paths);
     let settings = settings_store::load(&paths.settings());
     let local_root = match paths.local_root(&settings) {
         Ok(root) => root,
@@ -324,6 +337,17 @@ impl eframe::App for Shell {
                 TrayAction::SyncNow => self.engine.send(Command::SyncNow),
                 TrayAction::OpenFolder => self.host.open_folder(&snapshot.local_root),
                 TrayAction::Quit => self.quit(ctx),
+            }
+        }
+        // An update is in place: start the new version, in the tray if that is where this one
+        // is, and make way for it.
+        if snapshot.update == Update::Restarting && !self.quitting {
+            match update::restart(!self.visible) {
+                Ok(()) => self.quit(ctx),
+                Err(e) => {
+                    log::warn!("{e}");
+                    self.quitting = true;
+                }
             }
         }
         if let Some(tray) = &mut self.tray {

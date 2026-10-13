@@ -16,10 +16,12 @@ and `craft-proton-sync-*`.
 crates/
   core      craft-proton-sync-core      pure, no I/O: where files go (layout), what a sync does
                                         (plan), the pinned Proton Drive CLI and its command lines
-                                        and answers (drive), the UI/engine protocol, settings
+                                        and answers (drive), the app's own releases (update), the
+                                        UI/engine protocol, settings
   native    craft-proton-sync-native    desktop backend: downloads and checks the CLI (install),
                                         runs it (drive), signs in (account), one sync (sync), the
-                                        watching and scheduling thread (engine), login item
+                                        watching and scheduling thread (engine), updating the
+                                        app itself (update), login item
   ui-egui   craft-proton-sync-ui-egui   the egui UI and theme
 apps/
   craft-proton-sync                     desktop shell (eframe): window, tray icon
@@ -73,6 +75,23 @@ misbehaving must produce an error the user can act on, never a panic.
 - Only a page on `https://account.proton.me/` is ever opened in the browser (`drive::sign_in_url`),
   and never through a shell.
 
+### Updating the app itself
+
+- Updates come **only** from `https://github.com/Milkshak3s/craft-proton-sync/releases`:
+  `core::update::parse_release` drops any file that isn't at this project's download address for
+  that tag, and a package is installed only after it matches the release's `SHA256SUMS.txt`.
+  Never add another source, and never install a package without its checksum.
+- Only published releases count: no drafts, no pre-releases, and never a version that isn't
+  newer than the running one (no downgrades).
+- Installing without asking is **opt-in** (`Settings::auto_update`, off by default). Don't turn
+  it on for the user, and don't add other unprompted changes to the program.
+- The old program is moved aside, not deleted, until the new one is in place, and moved back if
+  the swap fails (`update::swap_file`). An update runs on the engine thread, so never mid-sync.
+- Development builds don't update themselves (`update::supported`).
+- The release file names in section 5 are what the updater looks for (`core::update::package`).
+  Renaming one breaks updates for everyone already installed: change both together, and keep
+  the old name published for a release or two.
+
 ### The user's password and files
 
 - The app never handles the password: sign-in is on Proton's page. Never add a password field,
@@ -97,7 +116,9 @@ ArtCraft's logos, marks and fonts are trademarks or separately licensed and are 
 1. **Tests are the gate.** The planner in `core` gets unit tests; whole syncs run against a
    folder standing in for Proton Drive in `crates/native/tests/sync.rs`; the UI is driven
    headlessly in `crates/ui-egui/tests/ui.rs`; `crates/native/tests/cli.rs` downloads and runs
-   the real CLI (ignored by default: 100 MB; CI runs it).
+   the real CLI (ignored by default: 100 MB; CI runs it); `crates/native/tests/update.rs` unpacks
+   and swaps in updates built on the spot, and has an ignored test that downloads and runs the
+   latest published release (run it by hand after publishing one).
 2. Nothing in CI talks to a real Proton account. A change to `native::drive`, `account.rs` or the
    pinned CLI version needs a manual sign-in and sync against a real account before it is merged;
    say in the PR that it was done.
@@ -122,7 +143,7 @@ draft by hand once it has been tried.
 | Platform | Files |
 |---|---|
 | Windows | `craft-proton-sync-<ver>-windows-{x64,arm64}-portable.zip` |
-| macOS | `craft-proton-sync-<ver>-macos-universal.dmg` (ad-hoc signed, not notarized) |
+| macOS | `craft-proton-sync-<ver>-macos-universal.dmg` (ad-hoc signed, not notarized), and `…-macos-universal.app.tar.gz`, the bundle alone, for self-updates |
 | Linux | `craft-proton-sync-<ver>-linux-{x86_64,aarch64}.tar.gz` |
 
 Builds are not code-signed yet; installers (MSI, AppImage, .deb, .rpm) are not built yet.

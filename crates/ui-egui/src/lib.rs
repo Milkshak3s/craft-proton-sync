@@ -17,7 +17,7 @@ pub mod theme;
 use std::path::Path;
 
 use craft_proton_sync_core::layout::{APP_FOLDERS, REMOTE_ROOT};
-use craft_proton_sync_core::protocol::{Backend, Command, Phase, Snapshot};
+use craft_proton_sync_core::protocol::{Backend, Command, Phase, Snapshot, Update};
 use craft_proton_sync_core::settings::{MAX_POLL_MINUTES, MIN_POLL_MINUTES, Settings};
 use craft_proton_sync_core::{APP_NAME, drive};
 use egui::{Color32, RichText, Ui};
@@ -135,7 +135,10 @@ impl SyncUi {
                             backend.send(Command::RetryInstall);
                         }
                     }
-                    Phase::SignedOut | Phase::SigningIn => sign_in(ui, &t, &snapshot, backend, host),
+                    Phase::SignedOut | Phase::SigningIn => {
+                        sign_in(ui, &t, &snapshot, backend, host);
+                        self.updates(ui, &t, &snapshot, backend, host);
+                    }
                     Phase::Idle | Phase::Syncing | Phase::Paused | Phase::SyncFailed => self.synced(ui, &t, &snapshot, backend, host),
                 });
         });
@@ -248,6 +251,7 @@ impl SyncUi {
         }
 
         self.settings(ui, t, backend, host);
+        self.updates(ui, t, snapshot, backend, host);
 
         ui.add_space(12.0);
         ui.label(
@@ -291,6 +295,68 @@ impl SyncUi {
         if let Some(error) = &self.host_error {
             problem(ui, t, error);
         }
+    }
+
+    /// The app's own version: whether a newer one is out, a button to install it, and the
+    /// choice to have that happen by itself.
+    fn updates(&mut self, ui: &mut Ui, t: &Tokens, snapshot: &Snapshot, backend: &dyn Backend, host: &mut dyn Host) {
+        const VERSION: &str = env!("CARGO_PKG_VERSION");
+        section(ui, t, "Updates");
+        if snapshot.update == Update::Unsupported {
+            ui.label(RichText::new(format!("Version {VERSION}. This build doesn't update itself.")).color(t.muted));
+            return;
+        }
+        if let Update::Failed(error) = &snapshot.update {
+            problem(ui, t, error);
+        }
+        ui.horizontal(|ui| {
+            let (text, button) = match &snapshot.update {
+                Update::Available { version } => (
+                    format!("Version {version} is out (you have {VERSION})."),
+                    Some(("Update now", Command::InstallUpdate, true)),
+                ),
+                Update::Installing { version, .. } => (format!("Installing version {version}…"), None),
+                Update::Restarting => ("Starting the new version…".to_string(), None),
+                Update::Checking | Update::Unchecked => (format!("Version {VERSION}. Checking for a newer one…"), None),
+                Update::UpToDate => (
+                    format!("Version {VERSION} is the latest."),
+                    Some(("Check now", Command::CheckForUpdate, false)),
+                ),
+                Update::Failed(_) | Update::Unsupported => {
+                    (format!("Version {VERSION}."), Some(("Try again", Command::CheckForUpdate, false)))
+                }
+            };
+            ui.label(text);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some((label, command, main)) = button {
+                    let clicked = if main {
+                        primary(ui, t, true, label).clicked()
+                    } else {
+                        outline(ui, t, label).clicked()
+                    };
+                    if clicked {
+                        backend.send(command);
+                    }
+                }
+            });
+        });
+        if let Update::Installing {
+            received,
+            total: Some(total),
+            ..
+        } = snapshot.update
+            && total > 0
+        {
+            ui.add(egui::ProgressBar::new(received as f32 / total as f32).corner_radius(0));
+        }
+        if ui
+            .checkbox(&mut self.settings.auto_update, "Install new versions automatically")
+            .changed()
+        {
+            host.settings_changed(&self.settings);
+            backend.send(Command::SetAutoUpdate(self.settings.auto_update));
+        }
+        ui.label(RichText::new("Updates come from this project's GitHub releases and are checked against the release's checksums before they are installed. The app restarts to finish.").size(12.0).color(t.muted));
     }
 }
 

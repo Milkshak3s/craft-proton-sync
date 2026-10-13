@@ -5,6 +5,7 @@
 //! - [`plan`]: what a two-way sync does, from three pictures of the folder.
 //! - [`protocol`]: what the UI and the sync engine say to each other.
 //! - [`settings`]: the user's settings.
+//! - [`update`]: the app's own releases: which is newer, which file is this computer's.
 
 #![deny(
     clippy::unwrap_used,
@@ -20,5 +21,6 @@ pub mod layout;
 pub mod plan;
 pub mod protocol;
 pub mod settings;
+pub mod update;
 
 pub const APP_NAME: &str = "Craft Proton Sync";

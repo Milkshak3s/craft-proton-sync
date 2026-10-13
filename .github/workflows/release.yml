@@ -141,12 +141,14 @@ jobs:
         run: |
           cargo build --release --locked -p craft-proton-sync --target aarch64-apple-darwin
           cargo build --release --locked -p craft-proton-sync --target x86_64-apple-darwin
-      - name: Package (universal .dmg, not notarized)
+      - name: Package (universal .dmg and the bundle for self-updates, not notarized)
         run: packaging/macos/package.sh "$VERSION"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-universal
-          path: dist/*.dmg
+          path: |
+            dist/*.dmg
+            dist/*.app.tar.gz
           if-no-files-found: error
 
   release:

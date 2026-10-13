@@ -26,6 +26,9 @@ cp "$root/LICENSE-MIT" "$root/LICENSE-APACHE" "$root/NOTICE" "$bundle/Contents/R
 
 codesign --force --deep --sign - "$bundle"
 
+# The bundle on its own, for the app to update itself from.
+tar -C "$dist/dmg" -czf "$dist/$app-$version-macos-universal.app.tar.gz" "$title.app"
+
 ln -s /Applications "$dist/dmg/Applications"
 hdiutil create -volname "$title" -srcfolder "$dist/dmg" -ov -format UDZO \
   "$dist/$app-$version-macos-universal.dmg"

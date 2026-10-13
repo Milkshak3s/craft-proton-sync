@@ -13,20 +13,26 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use craft_proton_sync_core::layout;
-use craft_proton_sync_core::protocol::{Activity, Backend, Command, Phase, Snapshot};
+use craft_proton_sync_core::protocol::{Activity, Backend, Command, Phase, Snapshot, Update};
 use craft_proton_sync_core::settings::{MAX_POLL_MINUTES, MIN_POLL_MINUTES, Settings};
+use craft_proton_sync_core::update::Release;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::account::{self, SignIn};
 use crate::drive::{Cli, Session};
 use crate::paths::Paths;
 use crate::sync::{self, SyncError, Syncer};
-use crate::{install, lock, open, unix_now};
+use crate::{install, lock, open, unix_now, update};
 
 /// How long the folder must be quiet before a change is synced.
 const DEBOUNCE: Duration = Duration::from_secs(3);
 const IDLE: Duration = Duration::from_secs(3600);
 const MAX_ACTIVITY: usize = 50;
+/// How often the project's releases are looked at for a newer version.
+const UPDATE_CHECK: Duration = Duration::from_secs(24 * 3600);
+/// How soon a check that failed (offline, say) is tried again.
+const UPDATE_RETRY: Duration = Duration::from_secs(3600);
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 enum Msg {
     Command(Command),
@@ -86,6 +92,10 @@ impl Engine {
             dirty: None,
             next_poll: Instant::now(),
             error: None,
+            auto_update: settings.auto_update,
+            next_update_check: None,
+            available: None,
+            restarting: false,
         };
         let handle = std::thread::Builder::new().name("sync-engine".into()).spawn(move || worker.run());
         let worker = match handle {
@@ -154,11 +164,23 @@ struct Worker {
     next_poll: Instant,
     /// Why the last sync failed.
     error: Option<String>,
+    auto_update: bool,
+    /// When the releases are next looked at; `None` in builds that don't update themselves.
+    next_update_check: Option<Instant>,
+    /// A newer release that was found.
+    available: Option<Release>,
+    /// An update is in place and the app is about to start again: nothing more is begun.
+    restarting: bool,
 }
 
 impl Worker {
     fn run(mut self) {
         self.install();
+        if update::supported() {
+            self.next_update_check = Some(Instant::now());
+        } else {
+            self.shared.update(|s| s.update = Update::Unsupported);
+        }
         loop {
             match self.rx.recv_timeout(self.wait()) {
                 Ok(Msg::LocalChange) => self.dirty = Some(Instant::now()),
@@ -169,6 +191,9 @@ impl Worker {
             if self.shared.stopping.load(Ordering::SeqCst) {
                 return;
             }
+            if self.next_update_check.is_some_and(|at| Instant::now() >= at) {
+                self.check_update();
+            }
             if self.due() {
                 self.sync();
             }
@@ -176,7 +201,7 @@ impl Worker {
     }
 
     fn can_sync(&self) -> bool {
-        self.cli.is_some() && self.account.is_some() && !self.paused
+        self.cli.is_some() && self.account.is_some() && !self.paused && !self.restarting
     }
 
     fn debounce_left(&self) -> Option<Duration> {
@@ -189,11 +214,14 @@ impl Worker {
 
     /// How long to sleep before the next sync could be due.
     fn wait(&self) -> Duration {
+        let update = self
+            .next_update_check
+            .map_or(IDLE, |at| at.saturating_duration_since(Instant::now()));
         if !self.can_sync() {
-            return IDLE;
+            return IDLE.min(update);
         }
         let poll = self.next_poll.saturating_duration_since(Instant::now());
-        self.debounce_left().map_or(poll, |left| left.min(poll))
+        self.debounce_left().map_or(poll, |left| left.min(poll)).min(update)
     }
 
     /// Sets the phase from what the worker knows, once it is at rest.
@@ -311,6 +339,23 @@ impl Worker {
             }
             // Handled where it is sent: this thread is waiting on the sign-in it cancels.
             Command::CancelSignIn => return,
+            Command::CheckForUpdate => {
+                if update::supported() && !self.restarting {
+                    self.check_update();
+                }
+                return;
+            }
+            Command::InstallUpdate => {
+                self.install_update();
+                return;
+            }
+            Command::SetAutoUpdate(on) => {
+                self.auto_update = on;
+                if on {
+                    self.install_update();
+                }
+                return;
+            }
             Command::SetPaused(paused) => {
                 self.paused = paused;
                 if !paused {
@@ -334,6 +379,68 @@ impl Worker {
             }
         }
         self.settle();
+    }
+
+    /// Looks at the project's releases for a newer version, and installs it if the user asked
+    /// for that to happen by itself.
+    fn check_update(&mut self) {
+        self.shared.update(|s| s.update = Update::Checking);
+        match update::check(VERSION) {
+            Ok(found) => {
+                self.next_update_check = Some(Instant::now() + UPDATE_CHECK);
+                let state = found.as_ref().map_or(Update::UpToDate, |r| Update::Available {
+                    version: r.version.clone(),
+                });
+                self.available = found;
+                self.shared.update(|s| s.update = state);
+                if self.auto_update {
+                    self.install_update();
+                }
+            }
+            Err(e) => {
+                log::warn!("{e}");
+                self.next_update_check = Some(Instant::now() + UPDATE_RETRY);
+                self.shared.update(|s| s.update = Update::Failed(e));
+            }
+        }
+    }
+
+    /// Installs the newer release that was found. Runs between syncs, never during one.
+    fn install_update(&mut self) {
+        let Some(release) = self.available.clone().filter(|_| !self.restarting) else {
+            return;
+        };
+        let version = release.version.clone();
+        log::info!("updating to version {version}");
+        let shared = self.shared.clone();
+        let mut last_percent = u64::MAX;
+        let mut progress = |received: u64, total: Option<u64>| {
+            let percent = total
+                .filter(|t| *t > 0)
+                .map_or(received / (1024 * 1024), |t| received.saturating_mul(100) / t);
+            if percent != last_percent {
+                last_percent = percent;
+                shared.update(|s| {
+                    s.update = Update::Installing {
+                        version: version.clone(),
+                        received,
+                        total,
+                    }
+                });
+            }
+        };
+        progress(0, None);
+        match update::install(&release, &self.paths, &mut progress) {
+            Ok(()) => {
+                self.restarting = true;
+                self.next_update_check = None;
+                self.shared.update(|s| s.update = Update::Restarting);
+            }
+            Err(e) => {
+                log::warn!("the update failed: {e}");
+                self.shared.update(|s| s.update = Update::Failed(e));
+            }
+        }
     }
 
     fn sign_in(&mut self) {

@@ -4,6 +4,7 @@
 //! - [`drive`]: runs the CLI, one command or a whole session.
 //! - [`account`]: signing in to and out of Proton Drive.
 //! - [`sync`]: one two-way sync of the folder.
+//! - [`update`]: updating the app itself from the project's releases.
 //! - [`engine`]: the thread that watches the folder and decides when to sync.
 
 #![deny(
@@ -18,6 +19,7 @@
 pub mod account;
 pub mod drive;
 pub mod engine;
+mod http;
 pub mod install;
 pub mod login;
 pub mod open;
@@ -25,6 +27,7 @@ pub mod paths;
 pub mod settings_store;
 pub mod single_instance;
 pub mod sync;
+pub mod update;
 
 pub use engine::Engine;
 

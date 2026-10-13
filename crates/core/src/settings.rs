@@ -15,6 +15,9 @@ pub struct Settings {
     pub paused: bool,
     /// Closing the window keeps syncing in the tray.
     pub close_to_tray: bool,
+    /// Install new versions of the app as they are published, without asking. Off unless the
+    /// user turns it on.
+    pub auto_update: bool,
     /// The synced folder; `None` is `<Documents>/ArtCraft`. No UI yet: edit the settings file.
     pub local_root: Option<PathBuf>,
 }
@@ -25,6 +28,7 @@ impl Default for Settings {
             poll_minutes: 5,
             paused: false,
             close_to_tray: true,
+            auto_update: false,
             local_root: None,
         }
     }

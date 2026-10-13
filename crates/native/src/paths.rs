@@ -47,6 +47,11 @@ impl Paths {
         self.data.join("staging")
     }
 
+    /// Where an update to the app is downloaded and unpacked.
+    pub fn update(&self) -> PathBuf {
+        self.data.join("update")
+    }
+
     pub fn settings(&self) -> PathBuf {
         self.data.join("settings.json")
     }

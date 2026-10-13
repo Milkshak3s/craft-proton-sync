@@ -27,6 +27,27 @@ pub enum Phase {
     SyncFailed,
 }
 
+/// Where the app's own updates stand.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Update {
+    /// This build doesn't update itself (a development build, or an unknown platform).
+    Unsupported,
+    Unchecked,
+    Checking,
+    UpToDate,
+    Available {
+        version: String,
+    },
+    Installing {
+        version: String,
+        received: u64,
+        total: Option<u64>,
+    },
+    /// The new version is in place; the app is about to start again as it.
+    Restarting,
+    Failed(String),
+}
+
 /// One file the last syncs touched.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Activity {
@@ -53,6 +74,7 @@ pub struct Snapshot {
     pub sign_in_url: Option<String>,
     /// Newest first.
     pub activity: Vec<Activity>,
+    pub update: Update,
 }
 
 impl Snapshot {
@@ -66,6 +88,7 @@ impl Snapshot {
             sign_in_error: None,
             sign_in_url: None,
             activity: Vec::new(),
+            update: Update::Unchecked,
         }
     }
 }
@@ -80,6 +103,10 @@ pub enum Command {
     SetPaused(bool),
     SetPollMinutes(u32),
     RetryInstall,
+    CheckForUpdate,
+    /// Install the version [`Update::Available`] names, then start again as it.
+    InstallUpdate,
+    SetAutoUpdate(bool),
 }
 
 pub trait Backend {
